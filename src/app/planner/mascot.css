@@ -20,7 +20,7 @@
 
 /* In the planner: top left, over the + / history pill's column, level with the tabs. */
 .pl-mascot--corner {
-  position: fixed;
+  position: absolute;
   z-index: 41;
   top: 8px;
   left: 16px;

@@ -1,7 +1,7 @@
 /* The Itinerary tab (board.tsx): the canvas, day headings, print cards and the prompt dock. */
 
 .pl-board {
-  position: fixed;
+  position: absolute;
   inset: 0;
   font-family: var(--ds-font-serif);
   font-weight: 380;
@@ -418,7 +418,7 @@
 /* A grey pill track; the selected segment is a white pill with a soft shadow that slides
    between the two. Both segments are the same width, so switching never shifts anything. */
 .pl-tabs {
-  position: fixed;
+  position: absolute;
   z-index: 40;
   top: 16px;
   left: 50%;

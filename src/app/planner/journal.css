@@ -33,7 +33,7 @@ html:has(.planner-page) body {
   align-items: flex-start;
   box-sizing: border-box;
   gap: var(--board-gap);
-  height: 100dvh;
+  height: 100%;
   padding: var(--inset) var(--grid-right) var(--inset) var(--grid-left);
   scroll-padding-inline: var(--grid-left) var(--grid-right);
   overflow-x: auto;
@@ -350,7 +350,7 @@ html:has(.planner-page) body {
 /* ---------- The floating pill and history, after the moodboard's Trips panel ---------- */
 
 :where(.planner-page) .hj-pill {
-  position: fixed;
+  position: absolute;
   z-index: 20;
   top: 50%;
   left: 16px;
@@ -384,7 +384,7 @@ html:has(.planner-page) body {
 }
 
 :where(.planner-page) .hj-history {
-  position: fixed;
+  position: absolute;
   z-index: 19;
   top: 50%;
   left: 84px;
@@ -394,7 +394,7 @@ html:has(.planner-page) body {
   flex-direction: column;
   gap: 14px;
   width: 264px;
-  max-height: calc(100dvh - 72px);
+  max-height: calc(100% - 72px);
   padding: 16px 12px 12px;
   border: 1px solid rgb(0 0 0 / 0.06);
   border-radius: 24px;

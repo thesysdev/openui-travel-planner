@@ -1,7 +1,7 @@
 /* The latest-page arrow (latest-arrow.tsx): the left pill's twin on the right edge. It sits in the
    grid's right gutter, so it never covers a page. */
 .pl-latest {
-  position: fixed;
+  position: absolute;
   z-index: 20;
   top: 50%;
   right: 16px;

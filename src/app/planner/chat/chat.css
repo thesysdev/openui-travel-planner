@@ -29,7 +29,7 @@
 :where(.planner-page) .pl-chat {
   --chat-top: 88px;
   --chat-bottom: 168px;
-  position: fixed;
+  position: absolute;
   z-index: 10;
   inset: 0;
   overflow-y: auto;
@@ -49,9 +49,9 @@
   margin: 0 auto;
   padding: var(--chat-top) 24px var(--chat-bottom);
 }
-/* The prompt bar: the board's slim pill, fixed at the foot of the page. */
+/* The prompt bar: the board's slim pill, pinned at the foot of the page. */
 :where(.planner-page) .pl-chat__dock.pl-chat__dock {
-  position: fixed;
+  position: absolute;
   z-index: 45;
   width: min(832px, calc(100vw - 32px));
 }
@@ -66,7 +66,7 @@
 /* The latest exchange always has the screen's height, so a reply grows into room that's already
    there and nothing moves when it lands. */
 :where(.planner-page) .pl-chat-turn:last-child {
-  min-height: calc(100dvh - var(--chat-top) - var(--chat-bottom));
+  min-height: calc(100cqh - var(--chat-top) - var(--chat-bottom));
   padding-bottom: 0;
 }
 /* Your message sits on the left like the replies: the pencil already sets it apart. */
@@ -884,7 +884,7 @@
   .planner-page .hj-history {
     top: 64px;
     left: 12px;
-    max-height: calc(100dvh - 80px);
+    max-height: calc(100% - 80px);
   }
 }
 

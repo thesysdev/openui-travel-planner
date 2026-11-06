@@ -109,7 +109,7 @@ body > .pl-flight {
 }
 /* The tabs' black alter ego: it grows out from the control's spot and springs back. */
 :where(.planner-page) .pl-island {
-  position: fixed;
+  position: absolute;
   z-index: 60;
   top: 14px;
   left: 50%;
