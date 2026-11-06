@@ -1,7 +1,7 @@
 /* The debug grid. Margins match .pl-home's padding so content should land on column edges. */
 
 .pl-grid {
-  position: fixed;
+  position: absolute;
   z-index: 100;
   inset: 0;
   pointer-events: none;
