@@ -22,6 +22,7 @@ import { DetailSheet } from "./sheet";
 import { bookingOf, followUps, Reply } from "./steps";
 import "./journal.css";
 import { BASE_PATH, withBase } from "../../lib/base-path";
+import { failure, turnedAway } from "../../lib/host";
 
 // A journal you read sideways, left to right: your message on its own page, the entry's
 // spreads (photos, big type, pen notes) to its right, then a whole-page prompt for the next
@@ -91,6 +92,8 @@ export default function HorizontalJournal() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [pending, setPending] = useState<Turn | null>(null);
+  // A message the host turned away (see turnedAway), put back into its trip's input.
+  const [unsent, setUnsent] = useState<{ trip: string; prompt: string } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   // The Swiss grid overlay: Ctrl+G or ?grid (no button in the pill).
   const [grid] = useGridOverlay();
@@ -328,12 +331,14 @@ export default function HorizontalJournal() {
     stays: booking ? { ...booking, hotels: booking.ids.map((id) => last.hotels[id]).filter((h) => h?.name && h.url) } : null,
   };
 
+  const draft = unsent?.trip === activeId ? unsent.prompt : undefined;
+
   const update = (id: string, change: (j: Journal) => Journal) =>
     setJournals((list) => list.map((j) => (j.id === id ? change(j) : j)));
 
   // The chat counts as picked up once that entry is saved (see send).
   const resuming = useRef<{ id: string; upTo: number } | null>(null);
-  async function send(prompt: string) {
+  async function send(prompt: string, typed = true) {
     if (!active || pending) return;
     const id = active.id;
     const history = active.turns;
@@ -343,6 +348,7 @@ export default function HorizontalJournal() {
     // Follow the new entry in: the message's page replaces the closing page, then spreads arrive.
     following.current = { on: true, said: entryPages().length, step: 0 };
     let code = "";
+    setUnsent(null);
     setPending({ prompt, code });
     try {
       const response = await fetch(withBase("/api/planner"), {
@@ -350,6 +356,7 @@ export default function HorizontalJournal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, history, chat: chatAsks, traveller: travellerLine(readTraveller()) }),
       });
+      if (turnedAway(response)) return typed ? setUnsent({ trip: id, prompt }) : undefined;
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -393,7 +400,7 @@ export default function HorizontalJournal() {
     const where = tripPlace ? ` about ${tripPlace}` : "";
     const asks = said.slice(from).map((t) => t.prompt.trim()).join("; ");
     resuming.current = { id: active.id, upTo: said.length };
-    void send(`Carry on from our chat${where}: ${asks}`.slice(0, 320)).finally(() => (resuming.current = null));
+    void send(`Carry on from our chat${where}: ${asks}`.slice(0, 320), false).finally(() => (resuming.current = null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, activeId]);
 
@@ -453,9 +460,9 @@ export default function HorizontalJournal() {
           );
         })}
         {pending ? null : turns.length ? (
-          <PlannerNext key={`${activeId}:${turns.length}`} onSend={send} suggestions={closing.suggestions} stays={closing.stays} />
+          <PlannerNext key={`${activeId}:${turns.length}`} onSend={send} draft={draft} suggestions={closing.suggestions} stays={closing.stays} />
         ) : (
-          <PlannerHome key={activeId} onSend={send} />
+          <PlannerHome key={activeId} onSend={send} draft={draft} />
         )}
       </div>
       </SheetOpener.Provider>
@@ -561,17 +568,6 @@ function HistoryCover({ journal }: { journal: Journal }) {
 /** Your message, kept on the page where you wrote it, in the same place and type as the prompt. */
 /** Your message on its own page. While the reply is on its way, it's written out letter by
  *  letter in pen, then a pencil line keeps moving under it until the first spread lands. */
-/** Why a request failed, in words: the route's JSON error when it sent one, never a raw parse
- *  error (a crash or a restart mid-request answers with an empty or HTML body). */
-export async function failure(response: Response) {
-  const text = await response.text().catch(() => "");
-  try {
-    const error = (JSON.parse(text) as { error?: string }).error;
-    if (error) return error;
-  } catch {}
-  return response.status >= 500 ? "The planner hit a snag on our side." : "";
-}
-
 function Said({ text, writing }: { text: string; writing: boolean }) {
   const [animate] = useState(writing);
   return (

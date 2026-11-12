@@ -11,6 +11,7 @@ import { chatLibrary, ChatTurn } from "./chat-library";
 import { wholeBlocks } from "./chat-stream";
 import "./chat.css";
 import { withBase } from "../../../lib/base-path";
+import { failure, turnedAway } from "../../../lib/host";
 
 // The Chat tab: the trip as a conversation with a travel agent, in one centred column on the
 // white page. Your messages are written in pencil, letter by letter, like the journal's; while
@@ -20,16 +21,6 @@ import { withBase } from "../../../lib/base-path";
 
 export type ChatTurnData = { prompt: string; code: string };
 
-/** Why a request failed, in words: the route's JSON error when it sent one. */
-async function failure(response: Response) {
-  const text = await response.text().catch(() => "");
-  try {
-    const error = (JSON.parse(text) as { error?: string }).error;
-    if (error) return error;
-  } catch {}
-  return response.status >= 500 ? "The planner hit a snag on our side." : "";
-}
-
 const sorry = (prompt: string, why: string) =>
   `root = Chat([p, f])\np = Pull(${JSON.stringify(`That reply didn't come through.${why} Nothing was lost, so try again.`)})\nf = FollowUps([Option(${JSON.stringify(prompt)}, null, "schedule")])`;
 
@@ -37,6 +28,8 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
   const bridge = useContext(TripBridge);
   const itinerary = useItinerary();
   const [pending, setPending] = useState<ChatTurnData | null>(null);
+  // A message the host turned away (see turnedAway), put back into the input.
+  const [unsent, setUnsent] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const all = [...turns, ...(pending ? [pending] : [])];
 
@@ -63,6 +56,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
     if (pending) return;
     glide.current = true;
     let code = "";
+    setUnsent("");
     setPending({ prompt, code });
     try {
       const response = await fetch(withBase("/api/planner/chat"), {
@@ -81,6 +75,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
           },
         }),
       });
+      if (turnedAway(response)) return setUnsent(prompt);
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -130,6 +125,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
           <PromptForm
             key={String(!!pending)}
             onSend={pending ? undefined : (p) => void send(p)}
+            draft={unsent}
             placeholder={bridge?.place ? `Ask anything about ${bridge.place}…` : "Ask your travel agent anything…"}
             label="Message your travel agent"
             // Links from openui.com hand over a question as ?prompt=.

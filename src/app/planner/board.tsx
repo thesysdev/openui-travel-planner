@@ -26,6 +26,7 @@ import { Price, readTraveller, travellerLine } from "./money";
 import { type Bounds, Camera } from "./board-camera";
 import "./board.css";
 import { withBase } from "../../lib/base-path";
+import { errorWords, turnedAway } from "../../lib/host";
 
 // The Itinerary tab: a canvas of our own (pan and zoom from board-camera.ts) where the saved
 // places become a plan. Items are grouped by their day, each day a masonry of print cards under a
@@ -573,7 +574,7 @@ export default function ItineraryBoard({
   const [pill, setPill] = useState(false);
   useEffect(() => {
     if (busy) return setPill(true);
-    if (!message) return;
+    if (!message) return setPill(false);
     const t = window.setTimeout(() => setPill(false), 3500);
     return () => window.clearTimeout(t);
   }, [busy, message]);
@@ -590,16 +591,20 @@ export default function ItineraryBoard({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt, dates, context, days: daysOf(context.split(" / "), dates), items: itinerary.items, traveller: travellerLine(readTraveller()) }),
         });
+        if (turnedAway(response)) {
+          setMessage("");
+          return false;
+        }
         // A crash or restart mid-request answers with an empty or HTML body: read it as text first.
         const text = await response.text();
-        let body: { items?: ItineraryItem[]; message?: string; error?: string } = {};
+        let body: { items?: ItineraryItem[]; message?: string; error?: unknown } = {};
         try {
           body = JSON.parse(text);
         } catch {
           body = { error: "That didn't come through. Try again?" };
         }
         if (body.items) itinerary.set(body.items);
-        setMessage(body.message || body.error || "");
+        setMessage(body.message || errorWords(body.error));
       } catch {
         setMessage("That didn't work. Try again?");
       } finally {
@@ -624,6 +629,10 @@ export default function ItineraryBoard({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt, place, dates, context, saved: items.map((i) => i.name), traveller: travellerLine(readTraveller()) }),
         });
+        if (turnedAway(response)) {
+          setAnswer(null);
+          return false;
+        }
         if (!response.ok || !response.body) throw new Error();
         // The answer streams in as JSON text: show what has arrived (partial JSON) as it grows,
         // then check the whole reply once it ends.
@@ -651,7 +660,12 @@ export default function ItineraryBoard({
     },
     [place, dates, context, items],
   );
-  const route = (prompt: string) => (reshapes(prompt) ? ask(prompt) : explore(prompt));
+  // A message the host turned away (see turnedAway), put back into the input.
+  const [unsent, setUnsent] = useState("");
+  const route = async (prompt: string) => {
+    setUnsent("");
+    if ((await (reshapes(prompt) ? ask(prompt) : explore(prompt))) === false) setUnsent(prompt);
+  };
 
   // With dates known, saved places that aren't on a day yet are made into a plan when the tab opens.
   const planned = useRef("");
@@ -710,8 +724,9 @@ export default function ItineraryBoard({
         </div>
         <div className="pl-board__bar">
           <PromptForm
-            key={String(busy || asking)}
+            key={`${busy || asking}:${unsent}`}
             onSend={items.length && !busy && !asking ? (p) => void route(p) : undefined}
+            draft={unsent}
             placeholder="Ask anything, or reshape the plan: group by day…"
             label="Ask about the trip or change the itinerary"
           />
