@@ -22,6 +22,7 @@ import { DetailSheet } from "./sheet";
 import { bookingOf, followUps, Reply } from "./steps";
 import "./journal.css";
 import { BASE_PATH, withBase } from "../../lib/base-path";
+import { gatewayTurnedAway } from "../../lib/gateway";
 
 // A journal you read sideways, left to right: your message on its own page, the entry's
 // spreads (photos, big type, pen notes) to its right, then a whole-page prompt for the next
@@ -91,6 +92,8 @@ export default function HorizontalJournal() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [pending, setPending] = useState<Turn | null>(null);
+  // A message the gateway turned away (see gateway.ts), back in its trip's input.
+  const [draft, setDraft] = useState<{ trip: string; prompt: string } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   // The Swiss grid overlay: Ctrl+G or ?grid (no button in the pill).
   const [grid] = useGridOverlay();
@@ -343,6 +346,7 @@ export default function HorizontalJournal() {
     // Follow the new entry in: the message's page replaces the closing page, then spreads arrive.
     following.current = { on: true, said: entryPages().length, step: 0 };
     let code = "";
+    setDraft(null);
     setPending({ prompt, code });
     try {
       const response = await fetch(withBase("/api/planner"), {
@@ -350,6 +354,8 @@ export default function HorizontalJournal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, history, chat: chatAsks, traveller: travellerLine(readTraveller()) }),
       });
+      // The carry-on from Chat isn't typed, so it's simply written again the next time Explore opens.
+      if (gatewayTurnedAway(response)) return setDraft(resuming.current ? null : { trip: id, prompt });
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -453,9 +459,15 @@ export default function HorizontalJournal() {
           );
         })}
         {pending ? null : turns.length ? (
-          <PlannerNext key={`${activeId}:${turns.length}`} onSend={send} suggestions={closing.suggestions} stays={closing.stays} />
+          <PlannerNext
+            key={`${activeId}:${turns.length}`}
+            onSend={send}
+            suggestions={closing.suggestions}
+            stays={closing.stays}
+            draft={draft?.trip === activeId ? draft.prompt : undefined}
+          />
         ) : (
-          <PlannerHome key={activeId} onSend={send} />
+          <PlannerHome key={activeId} onSend={send} draft={draft?.trip === activeId ? draft.prompt : undefined} />
         )}
       </div>
       </SheetOpener.Provider>

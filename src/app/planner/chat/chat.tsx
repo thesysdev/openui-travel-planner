@@ -11,6 +11,7 @@ import { chatLibrary, ChatTurn } from "./chat-library";
 import { wholeBlocks } from "./chat-stream";
 import "./chat.css";
 import { withBase } from "../../../lib/base-path";
+import { gatewayTurnedAway } from "../../../lib/gateway";
 
 // The Chat tab: the trip as a conversation with a travel agent, in one centred column on the
 // white page. Your messages are written in pencil, letter by letter, like the journal's; while
@@ -37,6 +38,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
   const bridge = useContext(TripBridge);
   const itinerary = useItinerary();
   const [pending, setPending] = useState<ChatTurnData | null>(null);
+  const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const all = [...turns, ...(pending ? [pending] : [])];
 
@@ -62,6 +64,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
   async function send(prompt: string) {
     if (pending) return;
     glide.current = true;
+    setDraft("");
     let code = "";
     setPending({ prompt, code });
     try {
@@ -81,6 +84,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
           },
         }),
       });
+      if (gatewayTurnedAway(response)) return setDraft(prompt);
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -134,6 +138,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
             label="Message your travel agent"
             // Links from openui.com hand over a question as ?prompt=.
             prefillParam="prompt"
+            draft={draft}
           />
         </div>
       </div>
