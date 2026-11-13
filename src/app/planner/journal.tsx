@@ -567,10 +567,8 @@ function HistoryCover({ journal }: { journal: Journal }) {
 export async function failure(response: Response) {
   const text = await response.text().catch(() => "");
   try {
-    // Either { error: "…" } or { error: { message: "…" } }.
-    const { error } = JSON.parse(text) as { error?: string | { message?: string } };
-    const message = typeof error === "string" ? error : error?.message;
-    if (message) return message;
+    const error = (JSON.parse(text) as { error?: string }).error;
+    if (error) return error;
   } catch {}
   return response.status >= 500 ? "The planner hit a snag on our side." : "";
 }
