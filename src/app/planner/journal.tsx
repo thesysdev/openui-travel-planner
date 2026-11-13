@@ -91,6 +91,9 @@ export default function HorizontalJournal() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [pending, setPending] = useState<Turn | null>(null);
+  // An entry that didn't come through is shown, with a tap to try again, but isn't kept: it's not
+  // part of the trip, so a first message that fails doesn't start one.
+  const [failed, setFailed] = useState<{ trip: string; turn: Turn } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   // The Swiss grid overlay: Ctrl+G or ?grid (no button in the pill).
   const [grid] = useGridOverlay();
@@ -173,7 +176,7 @@ export default function HorizontalJournal() {
   }, [phone, mode]);
 
   const active = journals.find((j) => j.id === activeId);
-  const turns = [...(active?.turns ?? []), ...(pending ? [pending] : [])];
+  const turns = [...(active?.turns ?? []), ...(failed?.trip === activeId ? [failed.turn] : []), ...(pending ? [pending] : [])];
 
   const pages = () => [...(strip.current?.querySelectorAll<HTMLElement>(".hj-page") ?? [])];
   // Pages are panels in a padded strip, so a page is "at" the left margin when its left edge
@@ -343,6 +346,7 @@ export default function HorizontalJournal() {
     // Follow the new entry in: the message's page replaces the closing page, then spreads arrive.
     following.current = { on: true, said: entryPages().length, step: 0 };
     let code = "";
+    setFailed(null);
     setPending({ prompt, code });
     try {
       const response = await fetch(withBase("/api/planner"), {
@@ -370,13 +374,10 @@ export default function HorizontalJournal() {
       // A friendly page and the same question as a follow-up, so one tap tries again.
       const why = error instanceof Error && error.message ? ` ${error.message}` : "";
       const sorry = `That reply didn't come through.${why} Nothing was lost, so try again.`;
-      update(id, (j) => ({
-        ...j,
-        turns: [
-          ...j.turns,
-          { prompt, code: `root = Journal([n, x])\nn = Sentence(${JSON.stringify(sorry)})\nx = Next("Try again?", [Option(${JSON.stringify(prompt)})])` },
-        ],
-      }));
+      setFailed({
+        trip: id,
+        turn: { prompt, code: `root = Journal([n, x])\nn = Sentence(${JSON.stringify(sorry)})\nx = Next("Try again?", [Option(${JSON.stringify(prompt)})])` },
+      });
     } finally {
       setPending(null);
     }
@@ -437,7 +438,7 @@ export default function HorizontalJournal() {
           // While it streams, only whole spreads are shown, in order (see slides.ts).
           const slides = wholeSlides(reply.program, turn === pending);
           return (
-            <div className="hj-entry" key={`${activeId}:${i}`}>
+            <div className="hj-entry" key={`${activeId}:${turn === failed?.turn ? "failed" : i}`}>
               <Said text={turn.prompt} writing={turn === pending} />
               <HotelsContext.Provider value={reply.hotels}>
                 {/* Only the newest finished entry's steps can be tapped; older ones show what was chosen. */}
