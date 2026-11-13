@@ -22,7 +22,6 @@ import { DetailSheet } from "./sheet";
 import { bookingOf, followUps, Reply } from "./steps";
 import "./journal.css";
 import { BASE_PATH, withBase } from "../../lib/base-path";
-import { gatewayTurnedAway } from "../../lib/gateway";
 
 // A journal you read sideways, left to right: your message on its own page, the entry's
 // spreads (photos, big type, pen notes) to its right, then a whole-page prompt for the next
@@ -92,8 +91,9 @@ export default function HorizontalJournal() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [pending, setPending] = useState<Turn | null>(null);
-  // A message the gateway turned away (see gateway.ts), back in its trip's input.
-  const [draft, setDraft] = useState<{ trip: string; prompt: string } | null>(null);
+  // An entry that didn't come through is shown, with a tap to try again, but isn't kept: it's not
+  // part of the trip, so a first message that fails doesn't start one.
+  const [failed, setFailed] = useState<{ trip: string; turn: Turn } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   // The Swiss grid overlay: Ctrl+G or ?grid (no button in the pill).
   const [grid] = useGridOverlay();
@@ -176,7 +176,7 @@ export default function HorizontalJournal() {
   }, [phone, mode]);
 
   const active = journals.find((j) => j.id === activeId);
-  const turns = [...(active?.turns ?? []), ...(pending ? [pending] : [])];
+  const turns = [...(active?.turns ?? []), ...(failed?.trip === activeId ? [failed.turn] : []), ...(pending ? [pending] : [])];
 
   const pages = () => [...(strip.current?.querySelectorAll<HTMLElement>(".hj-page") ?? [])];
   // Pages are panels in a padded strip, so a page is "at" the left margin when its left edge
@@ -346,7 +346,7 @@ export default function HorizontalJournal() {
     // Follow the new entry in: the message's page replaces the closing page, then spreads arrive.
     following.current = { on: true, said: entryPages().length, step: 0 };
     let code = "";
-    setDraft(null);
+    setFailed(null);
     setPending({ prompt, code });
     try {
       const response = await fetch(withBase("/api/planner"), {
@@ -354,8 +354,6 @@ export default function HorizontalJournal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, history, chat: chatAsks, traveller: travellerLine(readTraveller()) }),
       });
-      // The carry-on from Chat isn't typed, so it's simply written again the next time Explore opens.
-      if (gatewayTurnedAway(response)) return setDraft(resuming.current ? null : { trip: id, prompt });
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -376,13 +374,10 @@ export default function HorizontalJournal() {
       // A friendly page and the same question as a follow-up, so one tap tries again.
       const why = error instanceof Error && error.message ? ` ${error.message}` : "";
       const sorry = `That reply didn't come through.${why} Nothing was lost, so try again.`;
-      update(id, (j) => ({
-        ...j,
-        turns: [
-          ...j.turns,
-          { prompt, code: `root = Journal([n, x])\nn = Sentence(${JSON.stringify(sorry)})\nx = Next("Try again?", [Option(${JSON.stringify(prompt)})])` },
-        ],
-      }));
+      setFailed({
+        trip: id,
+        turn: { prompt, code: `root = Journal([n, x])\nn = Sentence(${JSON.stringify(sorry)})\nx = Next("Try again?", [Option(${JSON.stringify(prompt)})])` },
+      });
     } finally {
       setPending(null);
     }
@@ -443,7 +438,7 @@ export default function HorizontalJournal() {
           // While it streams, only whole spreads are shown, in order (see slides.ts).
           const slides = wholeSlides(reply.program, turn === pending);
           return (
-            <div className="hj-entry" key={`${activeId}:${i}`}>
+            <div className="hj-entry" key={`${activeId}:${turn === failed?.turn ? "failed" : i}`}>
               <Said text={turn.prompt} writing={turn === pending} />
               <HotelsContext.Provider value={reply.hotels}>
                 {/* Only the newest finished entry's steps can be tapped; older ones show what was chosen. */}
@@ -459,15 +454,9 @@ export default function HorizontalJournal() {
           );
         })}
         {pending ? null : turns.length ? (
-          <PlannerNext
-            key={`${activeId}:${turns.length}`}
-            onSend={send}
-            suggestions={closing.suggestions}
-            stays={closing.stays}
-            draft={draft?.trip === activeId ? draft.prompt : undefined}
-          />
+          <PlannerNext key={`${activeId}:${turns.length}`} onSend={send} suggestions={closing.suggestions} stays={closing.stays} />
         ) : (
-          <PlannerHome key={activeId} onSend={send} draft={draft?.trip === activeId ? draft.prompt : undefined} />
+          <PlannerHome key={activeId} onSend={send} />
         )}
       </div>
       </SheetOpener.Provider>
@@ -578,8 +567,10 @@ function HistoryCover({ journal }: { journal: Journal }) {
 export async function failure(response: Response) {
   const text = await response.text().catch(() => "");
   try {
-    const error = (JSON.parse(text) as { error?: string }).error;
-    if (error) return error;
+    // Either { error: "…" } or { error: { message: "…" } }.
+    const { error } = JSON.parse(text) as { error?: string | { message?: string } };
+    const message = typeof error === "string" ? error : error?.message;
+    if (message) return message;
   } catch {}
   return response.status >= 500 ? "The planner hit a snag on our side." : "";
 }

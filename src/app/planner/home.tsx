@@ -243,17 +243,14 @@ export function PromptForm({
   placeholder,
   label,
   prefillParam,
-  draft,
 }: {
   onSend?: (prompt: string) => void;
   placeholder: string;
   label: string;
   /** A query param to prefill the input from on load (e.g. "prompt"), so a link can hand over a question. */
   prefillParam?: string;
-  /** What the input starts with, e.g. a message that wasn't sent. */
-  draft?: string;
 }) {
-  const [value, setValue] = useState(draft ?? "");
+  const [value, setValue] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   // A link can arrive with a question (?prompt=...). Type it in, ready to send, and take it
   // off the address so a reload or the form remounting after a send doesn't bring it back.
@@ -307,7 +304,7 @@ export function PromptForm({
   );
 }
 
-export function PlannerHome({ onSend, weather, draft }: { onSend?: (prompt: string) => void; weather?: Weather; draft?: string }) {
+export function PlannerHome({ onSend, weather }: { onSend?: (prompt: string) => void; weather?: Weather }) {
   const places = useRandomFive();
   return (
     <section className="hj-page pl-home">
@@ -316,7 +313,7 @@ export function PlannerHome({ onSend, weather, draft }: { onSend?: (prompt: stri
       <div className="pl-home__body">
         <WeatherLine weather={weather} />
         <h1 className="pl-home__title">Where do you want to plan a trip to?</h1>
-        <PromptForm onSend={onSend} placeholder="Write a place, a mood, a month…" label="Write a destination or ask about a place" draft={draft} />
+        <PromptForm onSend={onSend} placeholder="Write a place, a mood, a month…" label="Write a destination or ask about a place" />
       </div>
       {/* Quick suggestions, along the bottom of the page. */}
       <PlaceChips places={places ?? suggestions} hidden={!places} onPick={(p) => onSend?.(`Plan a trip to ${p.name}, ${p.country}`)} />
@@ -435,17 +432,7 @@ export function StaysRow({ stays }: { stays: Stays }) {
  *  agent's follow-ups along the bottom. */
 const createsItinerary = (label: string) => /^(create|make|build|update)( an?| the| my)? itinerary\b/i.test(label.trim());
 
-export function PlannerNext({
-  onSend,
-  suggestions: offered,
-  stays,
-  draft,
-}: {
-  onSend?: (prompt: string) => void;
-  suggestions: FollowUp[];
-  stays?: Stays | null;
-  draft?: string;
-}) {
+export function PlannerNext({ onSend, suggestions: offered, stays }: { onSend?: (prompt: string) => void; suggestions: FollowUp[]; stays?: Stays | null }) {
   // "Create itinerary" (offered once the agent judges the trip ready) leads the follow-ups, and
   // reads "Update itinerary" once the trip's board already has days.
   const planned = (useItinerary()?.items ?? []).some((i) => i.day);
@@ -457,7 +444,7 @@ export function PlannerNext({
     <section className="hj-page pl-home pl-next">
       <div className="pl-home__body">
         <h1 className="pl-home__title">Where next?</h1>
-        <PromptForm onSend={onSend} placeholder="Ask anything about this trip…" label="Ask a follow-up about this trip" draft={draft} />
+        <PromptForm onSend={onSend} placeholder="Ask anything about this trip…" label="Ask a follow-up about this trip" />
         {stays?.hotels.length ? <StaysRow stays={stays} /> : null}
       </div>
       {suggestions.length ? <FollowUpCards items={suggestions} onPick={onSend} /> : null}

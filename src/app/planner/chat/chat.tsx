@@ -11,7 +11,6 @@ import { chatLibrary, ChatTurn } from "./chat-library";
 import { wholeBlocks } from "./chat-stream";
 import "./chat.css";
 import { withBase } from "../../../lib/base-path";
-import { gatewayTurnedAway } from "../../../lib/gateway";
 
 // The Chat tab: the trip as a conversation with a travel agent, in one centred column on the
 // white page. Your messages are written in pencil, letter by letter, like the journal's; while
@@ -25,8 +24,10 @@ export type ChatTurnData = { prompt: string; code: string };
 async function failure(response: Response) {
   const text = await response.text().catch(() => "");
   try {
-    const error = (JSON.parse(text) as { error?: string }).error;
-    if (error) return error;
+    // Either { error: "…" } or { error: { message: "…" } }.
+    const { error } = JSON.parse(text) as { error?: string | { message?: string } };
+    const message = typeof error === "string" ? error : error?.message;
+    if (message) return message;
   } catch {}
   return response.status >= 500 ? "The planner hit a snag on our side." : "";
 }
@@ -38,9 +39,11 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
   const bridge = useContext(TripBridge);
   const itinerary = useItinerary();
   const [pending, setPending] = useState<ChatTurnData | null>(null);
-  const [draft, setDraft] = useState("");
+  // A reply that didn't come through is shown, with a tap to try again, but isn't kept: it's not
+  // part of the trip, so a first message that fails doesn't start one.
+  const [failed, setFailed] = useState<ChatTurnData | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const all = [...turns, ...(pending ? [pending] : [])];
+  const all = [...turns, ...(failed ? [failed] : []), ...(pending ? [pending] : [])];
 
   // Open on the latest exchange, with its message at the top of the column.
   const opened = useRef(false);
@@ -64,7 +67,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
   async function send(prompt: string) {
     if (pending) return;
     glide.current = true;
-    setDraft("");
+    setFailed(null);
     let code = "";
     setPending({ prompt, code });
     try {
@@ -84,7 +87,6 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
           },
         }),
       });
-      if (gatewayTurnedAway(response)) return setDraft(prompt);
       if (!response.ok || !response.body) throw new Error(await failure(response));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -98,7 +100,7 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
       onTurn({ prompt, code });
     } catch (error) {
       const why = error instanceof Error && error.message ? ` ${error.message}` : "";
-      onTurn({ prompt, code: sorry(prompt, why) });
+      setFailed({ prompt, code: sorry(prompt, why) });
     } finally {
       setPending(null);
     }
@@ -113,14 +115,14 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
           {all.map((turn, i) => {
             const writing = turn === pending;
             return (
-              <article className="pl-chat-turn" key={i}>
+              <article className="pl-chat-turn" key={turn === failed ? "failed" : i}>
                 <ChatSaid text={turn.prompt} writing={writing} />
                 {/* One ChatAnswer from first chunk to last, so its Renderer sees the stream settle. */}
                 <ChatAnswer
                   code={turn.code}
                   turn={String(i)}
                   streaming={writing}
-                  send={!pending && i === turns.length - 1 ? send : undefined}
+                  send={!pending && i === all.length - 1 ? send : undefined}
                   answer={all[i + 1]?.prompt}
                   programs={programs.slice(0, i)}
                 />
@@ -138,7 +140,6 @@ export function ChatView({ turns, onTurn }: { turns: ChatTurnData[]; onTurn: (tu
             label="Message your travel agent"
             // Links from openui.com hand over a question as ?prompt=.
             prefillParam="prompt"
-            draft={draft}
           />
         </div>
       </div>
